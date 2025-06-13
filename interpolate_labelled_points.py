@@ -13,13 +13,11 @@ import sys
 import h5py
 import json 
 
-from typing import List
+from typing import List, Tuple
 from datetime import date
 import locale 
 
 import copy
-
-from typing import Tuple
 
 import pdb
 
@@ -51,6 +49,8 @@ def interpolate_points(files:str):
 		keypoints_arr = np.reshape(df.to_numpy(), [df.shape[0], -1, 3])
 		xs_arr = keypoints_arr[:, :, 0]
 		ys_arr = keypoints_arr[:, :, 1]
+		
+		pdb.set_trace() 
 		
 		fig, ax = plt.subplots()
 		spl, u = make_splprep([xs_arr[0,:], ys_arr[0,:]], s=0.1)
