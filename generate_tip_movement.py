@@ -39,6 +39,8 @@ from scipy.signal import resample
 
 from scipy.signal import savgol_filter
 
+from scipy.io import savemat # For saving as mat file. 
+
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
 ('2021-07-16-11-32-30', ('20210716-f1', 'WT')), ('2021-08-27-11-46-32' ,('20210827-f11', 'HOM')), ('2021-09-21-11-37-35', ('20210921-f1', 'WT')), ('2021-10-13-10-44-34', ('20211013-f1', 'HOM')),
@@ -48,6 +50,9 @@ match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-2
 ('2022-03-16-14-04-55', ('20220316-f12', 'HOM')), ('2022-03-18-11-40-24' ,('20220318-f11', 'HOM')), ('2022-03-18-14-53-12',('20220318-f12', 'HOM')), ('2022-03-21-14-27-34', ('20220321-f11', 'HOM')),
 ('2022-03-22-14-03-22', ('20220322-f10', 'WT')), ('2022-03-22-11-59-19' ,('20220322-f11', 'WT')), ('2022-03-23-10-11-32',('20220323-f10', 'WT')), ('2022-03-23-12-10-46', ('20220323-f11', 'WT')),
 ('2022-03-23-14-01-19', ('20220323-f12', 'WT')), ('2022-03-24-09-04-01' ,('20220324-f10', 'WT'))]
+
+def wrap180(angle:float)->float:
+	return ((angle + 180) % 360) - 180
 
 def plot_trajectory(files:str, fps:int, dest_fld:str):
 	sec = 60 
@@ -67,9 +72,9 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		xs_arr, ys_arr = np.zeros((T, alpha.size)), np.zeros((T, alpha.size))
 		
 		# Rotation matrix.
-		theta = np.radians(40)
-		c, s = np.cos(theta), np.sin(theta)
-		R    = np.array(((c, -s), (s, c)))
+		theta = np.radians(45)
+		c, s  = np.cos(theta), np.sin(theta)
+		R     = np.array(((c, -s), (s, c)))
 		
 		
 		for i in range(T):
@@ -85,22 +90,37 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 			xs_arr[i, :], ys_arr[i, :] =  interpolated_points[:, 0],  interpolated_points[:, 1]
 
 		
-		# Make sure that the uppermost part of the tail is centered at (0, 0).
-		for i in range(T):
-			xs_arr[i, :] -= xs_arr[i, 0]
-			ys_arr[i, :] += ys_arr[i, 0]
+		# # Make sure that the uppermost part of the tail is centered at (0, 0).
+		# for i in range(T):
+			# xs_arr[i, :] -= xs_arr[i, 0]
+			# ys_arr[i, :] += ys_arr[i, 0]
 		
 			# fig, ax = plt.subplots(figsize=(8, 8))
 			# ax.plot(xs_arr[i, :], ys_arr[i, :], '-')
 			# ax.plot(points[:, 0], points[:, 1], '.')
 			# plt.show()
 			
+		dx         = -np.diff(xs_arr, 1, axis=1)
+		dy         = -np.diff(ys_arr, 1, axis=1)
+		rad_ang    = np.arctan2(dy, dx)
+		deg_matrix = np.rad2deg(rad_ang)
+		
+		
+		for i in np.arange(1, deg_matrix.shape[1]):
+			dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
+						deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
+						deg_matrix[:, i] - deg_matrix[:, i-1] - 360]).T
+			indx = np.argmin(np.abs(dtheta), axis= 1)
+			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
+		
+		#pdb.set_trace()
 
 		xs_series = xs_arr[:, -1]
 		ys_series = ys_arr[:, -1]
 		
-		xs_ds = resample(xs_series, xs_series.size // fps)
-		ys_ds = resample(ys_series, ys_series.size // fps)
+		xs_ds   = resample(xs_series, xs_series.size // fps)
+		ys_ds   = resample(ys_series, ys_series.size // fps)
+		deg_ang = resample(deg_matrix[:, -1], deg_matrix[:, -1].size // fps) #np.rad2deg(rad_ang[:, -1])
 		
 		xs_matrix = np.zeros((xs_series.size // fps, xs_arr.shape[1]))
 		ys_matrix = np.zeros((ys_series.size // fps, ys_arr.shape[1]))
@@ -110,27 +130,12 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 			xs_matrix[:, i] = resample(xs_arr[:, i], xs_series.size // fps)
 			ys_matrix[:, i] = resample(ys_arr[:, i], ys_series.size // fps)
 		
-		
-		
-		dx = -np.diff(xs_matrix, 1, axis=1)
-		dy = -np.diff(ys_matrix, 1, axis=1)
-		rad_ang   = np.arctan2(dy, dx)
-		deg_matrix = np.rad2deg(rad_ang)
-		
-		for i in np.arange(1, deg_matrix.shape[1]):
-			dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
-						deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
-						deg_matrix[:, i] - deg_matrix[:, i-1] - 360]).T
-			indx = np.argmin(np.abs(dtheta), axis= 1)
-			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
-
-		deg_ang = deg_matrix[:, -1] #np.rad2deg(rad_ang[:, -1])
-		
 		#val_range = np.linspace(np.nanmin(deg_ang), np.nanmax(deg_ang), 100)
 		cmap      = plt.get_cmap('coolwarm', 100)
 		norm      = colors.Normalize(np.nanmin(deg_ang), np.nanmax(deg_ang))
 		
-		y = savgol_filter(ys_ds, window_length=sec, polyorder=0)
+		# Running average.
+		#y = savgol_filter(ys_ds, window_length=sec, polyorder=0)
 		#y = savgol_filter(ys_matrix[:, 0], window_length=sec, polyorder=0)
 		
 		fig = plt.figure(figsize=(8, 8))
@@ -140,9 +145,8 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		ax3 = fig.add_subplot(gs[1:, 2])
 		
 		#ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
-		ax1.plot(np.arange(0, xs_ds.size)/sec, deg_ang, color='#7570b3', linewidth=2)
+		ax1.plot(np.arange(0, deg_ang.size)/fps/sec, deg_ang, color='#7570b3', linewidth=2)
 		ax1.set(xlabel="Time [s]", ylabel=r"Tail angle ($\circ$)")
-		
 		
 		for i in range(xs_matrix.shape[0]):
 			ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
@@ -158,6 +162,7 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		
 		fig.tight_layout()
 		plt.suptitle(f"Fish {fish_id} ({genotype})")
+		pdb.set_trace()
 		plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 		plt.close('all')
 		
