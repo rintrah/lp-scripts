@@ -19,8 +19,6 @@ import locale
 
 import copy
 
-import pdb
-
 from IPython import get_ipython
 import pickle
 
@@ -53,6 +51,15 @@ match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-2
 
 def wrap180(angle:float)->float:
 	return ((angle + 180) % 360) - 180
+	
+def rot_matrix(theta:float)->np.ndarray:
+	# We rotate the fish so the top of the tail tip is at the bottom
+	# of the reference space.
+	# Rotation matrix.
+	theta = np.radians(theta)
+	c, s  = np.cos(theta), np.sin(theta)
+	R     = np.array(((c, -s), (s, c)))
+	return R
 
 def plot_trajectory(files:str, fps:int, dest_fld:str):
 	sec = 60 
@@ -61,21 +68,18 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		fish_name    = file.replace('.csv', '')
 		indx = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
 		fish_id, genotype = match_names[indx][1]
-
+		
+		# Load the tail points obtained by using Ligthning-Pose.
 		df           = pd.read_csv(file_data, header=[1, 2], index_col=0)
 		keypoints_arr = np.reshape(df.to_numpy(), [df.shape[0], -1, 3])
 		# xs_tmp = keypoints_arr[:, :, 0]
 		# ys_tmp = keypoints_arr[:, :, 1] 
 		T = keypoints_arr.shape[0]
-		
-		alpha = np.linspace(0, 1, 100)
+
+		alpha          = np.linspace(0, 1, 100)
 		xs_arr, ys_arr = np.zeros((T, alpha.size)), np.zeros((T, alpha.size))
 		
-		# Rotation matrix.
-		theta = np.radians(45)
-		c, s  = np.cos(theta), np.sin(theta)
-		R     = np.array(((c, -s), (s, c)))
-		
+		R = rot_matrix(50)
 		
 		for i in range(T):
 			points   = keypoints_arr[i, :, :2]
@@ -86,26 +90,38 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 			interpolator        = interp1d(distance, points, kind='quadratic', axis=0)
 			interpolated_points = interpolator(alpha)
 			# Rotate the points. 
-			interpolated_points = np.matmul(interpolated_points[:, :2], R)
+			#interpolated_points = np.matmul(interpolated_points[:, :2], R)
 			xs_arr[i, :], ys_arr[i, :] =  interpolated_points[:, 0],  interpolated_points[:, 1]
+			del interpolator, interpolated_points, distance, points
 
+		# Make sure that the uppermost part of the tail is centered at (0, 0). 
+		# I think the problem is here.  
+		for i in range(T):
+			xs_arr[i, :] -= xs_arr[i, 0]
+			ys_arr[i, :] -= ys_arr[i, 0]
 		
-		# # Make sure that the uppermost part of the tail is centered at (0, 0).
+		for i in range(T):
+			points         = np.array([xs_arr[i, :], ys_arr[i, :]])
+			rotated_points = np.matmul(R, points).T
+			xs_arr[i, :], ys_arr[i, :] = rotated_points[:, 0], rotated_points[:, 1]
+			del points, rotated_points
+
+
+		# fig, ax = plt.subplots(figsize=(8, 8))
 		# for i in range(T):
-			# xs_arr[i, :] -= xs_arr[i, 0]
-			# ys_arr[i, :] += ys_arr[i, 0]
-		
-			# fig, ax = plt.subplots(figsize=(8, 8))
-			# ax.plot(xs_arr[i, :], ys_arr[i, :], '-')
-			# ax.plot(points[:, 0], points[:, 1], '.')
-			# plt.show()
+			# ax.plot(xs_arr[i, 0], ys_arr[i, 0], '-', alpha=0.5)
+		# plt.show()
 			
 		dx         = -np.diff(xs_arr, 1, axis=1)
 		dy         = -np.diff(ys_arr, 1, axis=1)
 		rad_ang    = np.arctan2(dy, dx)
 		deg_matrix = np.rad2deg(rad_ang)
 		
+		vfunc = np.vectorize(wrap180)
+		for i in range(deg_matrix.shape[1]):
+			deg_matrix[:, i] = vfunc(deg_matrix[:, i])
 		
+		#pdb.set_trace()
 		for i in np.arange(1, deg_matrix.shape[1]):
 			dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
 						deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
@@ -113,8 +129,7 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 			indx = np.argmin(np.abs(dtheta), axis= 1)
 			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
 		
-		#pdb.set_trace()
-
+		
 		xs_series = xs_arr[:, -1]
 		ys_series = ys_arr[:, -1]
 		
@@ -145,13 +160,13 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		ax3 = fig.add_subplot(gs[1:, 2])
 		
 		#ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
-		ax1.plot(np.arange(0, deg_ang.size)/fps/sec, deg_ang, color='#7570b3', linewidth=2)
-		ax1.set(xlabel="Time [s]", ylabel=r"Tail angle ($\circ$)")
+		ax1.plot(np.arange(0, deg_ang.size)/sec, deg_ang, color='#7570b3', linewidth=2)
+		ax1.set(xlabel="Time [m]", ylabel=r"Tail angle ($\circ$)")
 		
 		for i in range(xs_matrix.shape[0]):
 			ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
 		im = ax2.scatter(xs_ds, ys_ds, c=cmap(norm(deg_ang)))
-		ax2.yaxis.set_inverted(True)
+		#ax2.yaxis.set_inverted(True)
 		ax2.set_axis_off() 
 		divider = make_axes_locatable(ax2)
 		cax = divider.append_axes('right', size='5%', pad=0.05)
@@ -162,7 +177,7 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		
 		fig.tight_layout()
 		plt.suptitle(f"Fish {fish_id} ({genotype})")
-		pdb.set_trace()
+		#pdb.set_trace()
 		plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 		plt.close('all')
 		
