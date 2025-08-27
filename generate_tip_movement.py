@@ -61,8 +61,28 @@ def rot_matrix(theta:float)->np.ndarray:
 	R     = np.array(((c, -s), (s, c)))
 	return R
 
-def plot_trajectory(files:str, fps:int, dest_fld:str):
+def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
+	"""
+	Plot the tail positions during the recording and returns a dictionary
+	with the number of tail movements of each larva.
+	Parameters
+	----------
+	files: list,
+		List of the full paths of the larva data. 
+	fps: int, 
+		The frame per seconds of the recording.
+	dest_fld: str,
+		Full path where the images will be saved.
+	Returns 
+	-------
+	df_mov: pd.DataFrame,
+		DataFrame with the total number of movements during the recording
+		of each larva.
+	"""
 	sec = 60 
+	
+	df_mov = [] 
+	
 	for file_data in files:
 		folder, file = ntpath.split(file_data)
 		fish_name    = file.replace('.csv', '')
@@ -145,6 +165,12 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 			xs_matrix[:, i] = resample(xs_arr[:, i], xs_series.size // fps)
 			ys_matrix[:, i] = resample(ys_arr[:, i], ys_series.size // fps)
 		
+		mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
+		
+		movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
+		
+		df_mov.append([fish_id, genotype, movs])
+		
 		#val_range = np.linspace(np.nanmin(deg_ang), np.nanmax(deg_ang), 100)
 		cmap      = plt.get_cmap('coolwarm', 100)
 		norm      = colors.Normalize(np.nanmin(deg_ang), np.nanmax(deg_ang))
@@ -186,7 +212,9 @@ def plot_trajectory(files:str, fps:int, dest_fld:str):
 		# plt.show()
 		# pdb.set_trace()
 	
-	return 
+	df_mov = pd.DataFrame(df_mov, columns=['Fish',  'Genotype',  'Movements'])
+	
+	return df_mov
 
 
 if __name__ == '__main__':
@@ -206,6 +234,7 @@ if __name__ == '__main__':
 	if not os.path.exists(dest_fld):
 		os.makedirs(dest_fld)
 		
-	plot_trajectory(files, fps, dest_fld)
+	df = plot_trajectory(files, fps, dest_fld)
 	
+	pdb.set_trace()
 	sys.exit(0)
