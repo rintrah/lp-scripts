@@ -75,19 +75,23 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 		Full path where the images will be saved.
 	Returns 
 	-------
-	df_mov: pd.DataFrame,
-		DataFrame with the total number of movements during the recording
+	df_ang: pd.DataFrame,
+		DataFrame with the value of the angles during the recording
 		of each larva.
 	"""
 	sec = 60 
 	
-	df_mov = [] 
+	df_ang = [] 
+	
+	fish_angles = {} 
 	
 	for file_data in files:
 		folder, file = ntpath.split(file_data)
 		fish_name    = file.replace('.csv', '')
 		indx = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
 		fish_id, genotype = match_names[indx][1]
+		
+		fish_angles[fish_id] = [] 
 		
 		# Load the tail points obtained by using Ligthning-Pose.
 		df           = pd.read_csv(file_data, header=[1, 2], index_col=0)
@@ -157,6 +161,9 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 		ys_ds   = resample(ys_series, ys_series.size // fps)
 		deg_ang = resample(deg_matrix[:, -1], deg_matrix[:, -1].size // fps) #np.rad2deg(rad_ang[:, -1])
 		
+		# Add tail tip angles.
+		fish_angles[fish_id].append(deg_ang)
+		
 		xs_matrix = np.zeros((xs_series.size // fps, xs_arr.shape[1]))
 		ys_matrix = np.zeros((ys_series.size // fps, ys_arr.shape[1]))
 		
@@ -165,11 +172,13 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 			xs_matrix[:, i] = resample(xs_arr[:, i], xs_series.size // fps)
 			ys_matrix[:, i] = resample(ys_arr[:, i], ys_series.size // fps)
 		
-		mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
+		#mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
 		
-		movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
+		#movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
+		pdb.set_trace()
 		
-		df_mov.append([fish_id, genotype, movs])
+		for angle in deg_ang:
+			df_ang.append([fish_id, genotype, angle])
 		
 		#val_range = np.linspace(np.nanmin(deg_ang), np.nanmax(deg_ang), 100)
 		cmap      = plt.get_cmap('coolwarm', 100)
@@ -179,42 +188,42 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 		#y = savgol_filter(ys_ds, window_length=sec, polyorder=0)
 		#y = savgol_filter(ys_matrix[:, 0], window_length=sec, polyorder=0)
 		
-		fig = plt.figure(figsize=(8, 8))
-		gs  = fig.add_gridspec(3,3)
-		ax1 = fig.add_subplot(gs[0, :])
-		ax2 = fig.add_subplot(gs[1:, :2])
-		ax3 = fig.add_subplot(gs[1:, 2])
+		# fig = plt.figure(figsize=(8, 8))
+		# gs  = fig.add_gridspec(3,3)
+		# ax1 = fig.add_subplot(gs[0, :])
+		# ax2 = fig.add_subplot(gs[1:, :2])
+		# ax3 = fig.add_subplot(gs[1:, 2])
 		
-		#ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
-		ax1.plot(np.arange(0, deg_ang.size)/sec, deg_ang, color='#7570b3', linewidth=2)
-		ax1.set(xlabel="Time [m]", ylabel=r"Tail angle ($\circ$)")
+		# #ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
+		# ax1.plot(np.arange(0, deg_ang.size)/sec, deg_ang, color='#7570b3', linewidth=2)
+		# ax1.set(xlabel="Time [m]", ylabel=r"Tail angle ($\circ$)")
 		
-		for i in range(xs_matrix.shape[0]):
-			ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
-		im = ax2.scatter(xs_ds, ys_ds, c=cmap(norm(deg_ang)))
-		#ax2.yaxis.set_inverted(True)
-		ax2.set_axis_off() 
-		divider = make_axes_locatable(ax2)
-		cax = divider.append_axes('right', size='5%', pad=0.05)
-		fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='vertical')
+		# for i in range(xs_matrix.shape[0]):
+			# ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
+		# im = ax2.scatter(xs_ds, ys_ds, c=cmap(norm(deg_ang)))
+		# #ax2.yaxis.set_inverted(True)
+		# ax2.set_axis_off() 
+		# divider = make_axes_locatable(ax2)
+		# cax = divider.append_axes('right', size='5%', pad=0.05)
+		# fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='vertical')
 		
-		ax3.hist(deg_ang, bins='fd', edgecolor='none', facecolor='#7570b3')
-		ax3.set(xlabel=r"Tail angle ($\circ$)", ylabel="# count")
+		# ax3.hist(deg_ang, bins='fd', edgecolor='none', facecolor='#7570b3')
+		# ax3.set(xlabel=r"Tail angle ($\circ$)", ylabel="# count")
 		
-		fig.tight_layout()
-		plt.suptitle(f"Fish {fish_id} ({genotype})")
-		#pdb.set_trace()
-		plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
-		plt.close('all')
+		# fig.tight_layout()
+		# plt.suptitle(f"Fish {fish_id} ({genotype})")
+		# #pdb.set_trace()
+		# plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		# plt.close('all')
 		
 		# plt.scatter(xs_ds, ys_ds - y, s=5)
 		# plt.gca().invert_yaxis()
 		# plt.show()
 		# pdb.set_trace()
 	
-	df_mov = pd.DataFrame(df_mov, columns=['Fish',  'Genotype',  'Movements'])
+	df_ang = pd.DataFrame(df_ang, columns=['Fish',  'Genotype',  'Angle'])
 	
-	return df_mov
+	return df_ang
 
 
 if __name__ == '__main__':
@@ -235,6 +244,8 @@ if __name__ == '__main__':
 		os.makedirs(dest_fld)
 		
 	df = plot_trajectory(files, fps, dest_fld)
+	
+	df.to_hdf(os.path.join(dest_fld, 'fish-tail-tip-angle-info.h5'), key='df', mode='w')
 	
 	pdb.set_trace()
 	sys.exit(0)
