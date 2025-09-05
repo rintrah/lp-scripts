@@ -247,5 +247,4 @@ if __name__ == '__main__':
 	
 	df.to_hdf(os.path.join(dest_fld, 'fish-tail-tip-angle-info.h5'), key='df', mode='w')
 	
-	pdb.set_trace()
 	sys.exit(0)
