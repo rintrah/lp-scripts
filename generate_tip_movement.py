@@ -37,7 +37,7 @@ from scipy.signal import resample
 
 from scipy.signal import savgol_filter
 
-from scipy.io import savemat # For saving as mat file. 
+from scipy.io import savemat, loadmat # For saving as mat file. 
 
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
@@ -145,7 +145,7 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 		for i in range(deg_matrix.shape[1]):
 			deg_matrix[:, i] = vfunc(deg_matrix[:, i])
 		
-		#pdb.set_trace()
+		
 		for i in np.arange(1, deg_matrix.shape[1]):
 			dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
 						deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
@@ -153,7 +153,8 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 			indx = np.argmin(np.abs(dtheta), axis= 1)
 			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
 		
-		
+		savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/bouts-data', fish_name + '-tail-deg.mat'), {'tail':deg_matrix})
+		 
 		xs_series = xs_arr[:, -1]
 		ys_series = ys_arr[:, -1]
 		
@@ -175,7 +176,7 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 		#mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
 		
 		#movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
-		pdb.set_trace()
+		
 		
 		for angle in deg_ang:
 			df_ang.append([fish_id, genotype, angle])
