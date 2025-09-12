@@ -43,7 +43,7 @@ from scipy.signal import resample
 
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
-('2021-07-16-11-32-30', ('20210716-f1', 'WT')), ('2021-08-27-11-46-32' ,('20210827-f11', 'HOM')), ('2021-09-21-11-37-35', ('20210921-f1', 'WT')), ('2021-10-13-10-44-34', ('20211013-f1', 'HOM')),
+('2021-07-16-11-32-30', ('20210716-f1', 'WT')), ('2021-08-27-11-46-32' ,('20210827-f1', 'HOM')), ('2021-09-21-11-37-35', ('20210921-f1', 'WT')), ('2021-10-13-10-44-34', ('20211013-f1', 'HOM')),
 ('2021-11-18-14-06-44', ('20211118-f11', 'WT')), ('2022-01-20-11-21-57' ,('20220120-f10', 'HOM')), ('2022-02-08-10-21-23', ('20220208-f10', 'WT')), ('2022-02-08-12-42-27', ('20220208-f11', 'WT')),
 ('2022-02-10-11-11-50', ('20220210-f10', 'HOM')), ('2022-02-16-09-46-03' ,('20220216-f10', 'WT')), ('2022-02-18-13-11-27',('20220218-f11', 'WT')), ('2022-02-18-15-06-54', ('20220218-f12', 'WT')),
 ('2022-03-14-09-07-13', ('20220314-f10', 'HOM')), ('2022-03-14-12-12-26' ,('20220314-f11', 'HOM')), ('2022-03-15-09-29-12',('20220315-f10', 'HOM')), ('2022-03-15-13-49-02', ('20220315-f12', 'HOM')),
@@ -68,6 +68,18 @@ def vectorize_jitter(x:np.ndarray, stdev:float):
 	return np.vectorize(rand_jitter)(x, stdev)
 
 if __name__ == '__main__':
+	if sys.platform == 'linux' or sys.platform == 'linux2':
+		main_folder = "/home/enrique/WashU/Data"
+	#matplotlib.use('Agg')
+	elif sys.platform == 'darwin':
+		main_folder = "/Users/enriquehansen/Data/WashU/Data"
+		matplotlib.use('MacOSX')
+	elif sys.platform == 'win32':
+		main_folder = r"C:\Users\enriq\Data\WashU\Data"
+		locale.setlocale(locale.LC_ALL, 'en_US.UTF-8')
+	else:
+		raise NameError("Unknown OS.")
+	
 	preds_folder = '/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/'
 
 	dest_fld = os.path.join(preds_folder ,'fish-plots');
@@ -89,7 +101,14 @@ if __name__ == '__main__':
 	
 	filenames = next(os.walk(bouts_folder))[2]
 	
-	bouts_gen = {'HOM':np.array([]), 'WT':np.array([])}
+	# Load XLS file with information about all fish.
+	xls_file  = [xls for xls in os.listdir(main_folder) if os.path.isfile(os.path.join(main_folder, xls)) and 'zf-lsm' in xls]
+	fish_info = pd.read_excel(os.path.join(main_folder, xls_file[0]))
+	
+	bouts_gen = {'HOM':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}, \
+				'HOM M':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}, \
+				'WT':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}, \
+				'WT M':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}} 
 	
 	
 	for file in filenames:
@@ -103,13 +122,19 @@ if __name__ == '__main__':
 		num_lst = [] 
 		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
 			num_lst.append(list(map(itemgetter(1), g)))
+		
+		f_name   = match_names[indx][1][0]
+		if f_name == '20210827-f11':
+			pdb.set_trace()
+		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
 		genotype = match_names[indx][1][1]
-		print(f"Genotype is {genotype} for fish {fish_name}.")
-		len_lst = np.array(list(map(len, num_lst))) / 500
+		print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
 		
-		#len_lst = np.array(len(num_lst))
+		frames_lst = np.array(list(map(len, num_lst))) 
 		
-		bouts_gen[genotype] = np.append(bouts_gen[genotype], len_lst)
+		if dpf > 6:
+			genotype = genotype + ' M'
+		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/500), np.append(bouts_gen[genotype]['Frames'], np.nanmean(frames_lst/500)), np.append(bouts_gen[genotype]['Events'], len(num_lst))
 		
 		
 		# # Load the tail points obtained by using Ligthning-Pose.
@@ -158,17 +183,26 @@ if __name__ == '__main__':
 				# ax.plot(ys_arr[k, :], xs_arr[k, :], c=cmap(j))
 			# ax.set_axis_off()
 			# plt.show()
-		
 	
+	for key in bouts_gen['WT'].keys(): 
+		fig, ax = plt.subplots(figsize=(8, 8))
+		ax.bar([1, 2], [bouts_gen['HOM'][key].mean(), bouts_gen['WT'][key].mean()], facecolor='none', edgecolor='black', linewidth=3)
+		ax.scatter(vectorize_jitter(1 * np.ones((bouts_gen['HOM'][key].size, )), 0.1), bouts_gen['HOM'][key], alpha=0.5, color='red')
+		ax.scatter(vectorize_jitter(2 * np.ones((bouts_gen['WT'][key].size, )), 0.1), bouts_gen['WT'][key], alpha=0.5, color='blue')
+		ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='young larva')
+		ax.set_xticks([1, 2])
+		ax.set_xticklabels(['fmr1-/-', 'wild type'])
+		print(mannwhitneyu(bouts_gen['HOM'][key], bouts_gen['WT'][key]))
 	
-	fig, ax = plt.subplots(figsize=(8, 8))
-	ax.bar([1, 2], [bouts_gen['HOM'].mean(), bouts_gen['WT'].mean()], facecolor='none', edgecolor='black', linewidth=3)
-	ax.scatter(vectorize_jitter(1 * np.ones((bouts_gen['HOM'].size, )), 0.1), bouts_gen['HOM'], alpha=0.5, color='red')
-	ax.scatter(vectorize_jitter(2 * np.ones((bouts_gen['WT'].size, )), 0.1), bouts_gen['WT'], alpha=0.5, color='blue')
-	ax.set(xlabel="Genotype", ylabel="# of frames per event")
-	ax.set_xticks([1, 2])
-	ax.set_xticklabels(['fmr1-/-', 'wild type'])
-	print(mannwhitneyu(bouts_gen['HOM'], bouts_gen['WT']))
+	for key in bouts_gen['WT'].keys(): 
+		fig, ax = plt.subplots(figsize=(8, 8))
+		ax.bar([1, 2], [bouts_gen['HOM M'][key].mean(), bouts_gen['WT M'][key].mean()], facecolor='none', edgecolor='black', linewidth=3)
+		ax.scatter(vectorize_jitter(1 * np.ones((bouts_gen['HOM M'][key].size, )), 0.1), bouts_gen['HOM M'][key], alpha=0.5, color='red')
+		ax.scatter(vectorize_jitter(2 * np.ones((bouts_gen['WT M'][key].size, )), 0.1), bouts_gen['WT M'][key], alpha=0.5, color='blue')
+		ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='older larva')
+		ax.set_xticks([1, 2])
+		ax.set_xticklabels(['fmr1-/-', 'wild type'])
+		print(mannwhitneyu(bouts_gen['HOM M'][key], bouts_gen['WT M'][key]))
 	pdb.set_trace()
 	
 	sys.exit(0)
