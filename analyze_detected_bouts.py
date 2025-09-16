@@ -10,6 +10,8 @@ import glob
 import ntpath
 import sys 
 
+import math
+
 from typing import List, Tuple
 from datetime import date
 import locale 
@@ -40,6 +42,8 @@ from scipy.io import loadmat, savemat
 
 from scipy.interpolate import make_splprep, interp1d
 from scipy.signal import resample
+
+from decimal import Decimal
 
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
@@ -80,11 +84,15 @@ if __name__ == '__main__':
 	else:
 		raise NameError("Unknown OS.")
 	
+	# Clear all images.
+	plt.close('all')
+	
 	preds_folder = '/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/'
 
 	dest_fld = os.path.join(preds_folder ,'fish-plots');
 	if not os.path.exists(dest_fld):
 		os.makedirs(dest_fld)
+		
 		
 	fps = 500
 	
@@ -109,7 +117,11 @@ if __name__ == '__main__':
 				'HOM M':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}, \
 				'WT':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}, \
 				'WT M':{'Seconds':np.array([]), 'Frames':np.array([]), 'Events':np.array([])}} 
+				
+	sec_gen = {'HOM':{'Spontaneous':np.array([]), 'Light Dot':np.array([]), 'Moving Dot':np.array([])}, \
+				'WT':{'Spontaneous':np.array([]), 'Light Dot':np.array([]), 'Moving Dot':np.array([])}} 
 	
+	all_gen = {'HOM':np.array([]), 'WT':np.array([])}
 	
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
@@ -118,23 +130,56 @@ if __name__ == '__main__':
 		
 		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
 		bouts = loadmat(os.path.join(bouts_folder, file))['bouts'].flatten()
+		
 		idd   = np.where(bouts == 1)[0].flatten()
 		num_lst = [] 
 		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
 			num_lst.append(list(map(itemgetter(1), g)))
 		
 		f_name   = match_names[indx][1][0]
-		if f_name == '20210827-f11':
-			pdb.set_trace()
+		print(f"For fish {f_name} the size of bouts vector is {bouts.size / fps / 60}.")
+		
+		min_size = bouts.size//500//60
+		#pdb.set_trace()
+		windows   = np.array_split(np.arange(0, bouts.size), min_size)
+		bouts_min = np.zeros((len(windows),))
+		
+		for i, window in enumerate(windows):
+			idd = np.where(bouts[window] == 1)[0].flatten()
+			bm  = []
+			for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
+				bm.append(list(map(itemgetter(1), g)))
+			bouts_min[i] = len(bm)
+		
+		
 		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
 		genotype = match_names[indx][1][1]
-		print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
+		#print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
+		
+		
+		stim_info = pd.read_csv(os.path.join(main_folder, os.path.join(f_name, 'LaunchFile_' + f_name + '.csv')))
+		start_mov = int(list(stim_info['Fish ID'][stim_info[ f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
+		
+		# Separate recording sections. 
+		sp_pnt  = np.arange(100, 1750).astype('int')
+		ld_pnt  = np.arange(1850,start_mov).astype('int')
+		mv_pnt  = np.arange(start_mov, 5200).astype('int') # Remove "magic" numbers.
+		all_pnt = np.concatenate((np.arange(100, 1750).astype('int'), np.arange(1850, 5200).astype('int')))
+		
 		
 		frames_lst = np.array(list(map(len, num_lst))) 
 		
+		sp_lst  = [x for x in num_lst if all(np.isin(np.array(x)//fps, sp_pnt))]
+		ld_lst  = [x for x in num_lst if all(np.isin(np.array(x)//fps, ld_pnt))]
+		mv_lst  = [x for x in num_lst if all(np.isin(np.array(x)//fps, mv_pnt))]
+		all_lst = [x for x in num_lst if all(np.isin(np.array(x)//fps, all_pnt))]
+		
+		sec_gen[genotype]['Spontaneous'], sec_gen[genotype]['Light Dot'], sec_gen[genotype]['Moving Dot']  = np.append(sec_gen[genotype]['Spontaneous'], len(sp_lst)), np.append(sec_gen[genotype]['Light Dot'], len(ld_lst)), np.append(sec_gen[genotype]['Moving Dot'], len(mv_lst))
+		all_gen[genotype] = np.append(all_gen[genotype], bouts_min.mean())
+		
 		if dpf > 6:
 			genotype = genotype + ' M'
-		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/500), np.append(bouts_gen[genotype]['Frames'], np.nanmean(frames_lst/500)), np.append(bouts_gen[genotype]['Events'], len(num_lst))
+		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/500), np.append(bouts_gen[genotype]['Frames'], frames_lst), np.append(bouts_gen[genotype]['Events'], bouts_min.mean())
 		
 		
 		# # Load the tail points obtained by using Ligthning-Pose.
@@ -189,20 +234,69 @@ if __name__ == '__main__':
 		ax.bar([1, 2], [bouts_gen['HOM'][key].mean(), bouts_gen['WT'][key].mean()], facecolor='none', edgecolor='black', linewidth=3)
 		ax.scatter(vectorize_jitter(1 * np.ones((bouts_gen['HOM'][key].size, )), 0.1), bouts_gen['HOM'][key], alpha=0.5, color='red')
 		ax.scatter(vectorize_jitter(2 * np.ones((bouts_gen['WT'][key].size, )), 0.1), bouts_gen['WT'][key], alpha=0.5, color='blue')
-		ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='young larva')
+		if key == 'Events':
+			ax.set(xlabel="Genotype", ylabel=f"# of bouts per minute", title='younger larvae')
+		else:
+			ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='younger larvae')
 		ax.set_xticks([1, 2])
 		ax.set_xticklabels(['fmr1-/-', 'wild type'])
-		print(mannwhitneyu(bouts_gen['HOM'][key], bouts_gen['WT'][key]))
+		stats, pvalue = mannwhitneyu(bouts_gen['HOM'][key], bouts_gen['WT'][key])
+		bottom, top = ax.get_ylim()
+		ax.hlines(y=top , xmin=1, xmax=2, linewidth=2, color='k')
+		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
+		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-young-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.close('all')
 	
 	for key in bouts_gen['WT'].keys(): 
 		fig, ax = plt.subplots(figsize=(8, 8))
 		ax.bar([1, 2], [bouts_gen['HOM M'][key].mean(), bouts_gen['WT M'][key].mean()], facecolor='none', edgecolor='black', linewidth=3)
 		ax.scatter(vectorize_jitter(1 * np.ones((bouts_gen['HOM M'][key].size, )), 0.1), bouts_gen['HOM M'][key], alpha=0.5, color='red')
 		ax.scatter(vectorize_jitter(2 * np.ones((bouts_gen['WT M'][key].size, )), 0.1), bouts_gen['WT M'][key], alpha=0.5, color='blue')
-		ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='older larva')
+		if key == 'Events':
+			ax.set(xlabel="Genotype", ylabel=f"# of bouts per minute", title='older larvae')
+		else:
+			ax.set(xlabel="Genotype", ylabel=f"# of {key}", title='older larvae')
 		ax.set_xticks([1, 2])
 		ax.set_xticklabels(['fmr1-/-', 'wild type'])
-		print(mannwhitneyu(bouts_gen['HOM M'][key], bouts_gen['WT M'][key]))
+		stats, pvalue = mannwhitneyu(bouts_gen['HOM M'][key], bouts_gen['WT M'][key])
+		bottom, top = ax.get_ylim()
+		ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
+		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
+		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-older-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.close('all')
+		
+	for key in sec_gen['WT'].keys(): 
+		fig, ax = plt.subplots(figsize=(8, 8))
+		ax.bar([1, 2], [sec_gen['HOM'][key].mean(), sec_gen['WT'][key].mean()], facecolor='none', edgecolor='black', linewidth=3)
+		ax.scatter(vectorize_jitter(1 * np.ones((sec_gen['HOM'][key].size, )), 0.1), sec_gen['HOM'][key], alpha=0.5, color='red')
+		ax.scatter(vectorize_jitter(2 * np.ones((sec_gen['WT'][key].size, )), 0.1), sec_gen['WT'][key], alpha=0.5, color='blue')
+		ax.set(xlabel="Genotype", ylabel=f"# of {key} events")
+		ax.set_xticks([1, 2])
+		ax.set_xticklabels(['fmr1-/-', 'wild type'])
+		stats, pvalue = mannwhitneyu(sec_gen['HOM'][key], sec_gen['WT'][key])
+		bottom, top = ax.get_ylim()
+		ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
+		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
+		print(f"For section {key} the p-value is {pvalue}.")
+		plt.savefig(os.path.join(dest_fld, f"comparison-num-events-during-{key}-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.close('all')
+		
+	#for key in sec_gen['WT'].keys(): 
+	fig, ax = plt.subplots(figsize=(8, 8))
+	ax.bar([1, 2], [all_gen['HOM'].mean(), all_gen['WT'].mean()], facecolor='none', edgecolor='black', linewidth=3)
+	ax.scatter(vectorize_jitter(1 * np.ones((all_gen['HOM'].size, )), 0.1), all_gen['HOM'], alpha=0.5, color='red')
+	ax.scatter(vectorize_jitter(2 * np.ones((all_gen['WT'].size, )), 0.1), all_gen['WT'], alpha=0.5, color='blue')
+	ax.set(xlabel="Genotype", ylabel=f"# of bouts per minute")
+	ax.set_xticks([1, 2])
+	ax.set_xticklabels(['fmr1-/-', 'wild type'])
+	stats, pvalue = mannwhitneyu(all_gen['HOM'], all_gen['WT'])
+	bottom, top = ax.get_ylim()
+	ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
+	ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
+	print(f"For section {key} the p-value is {pvalue}.")
+	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-min-during-recording-larva.png")	, dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
+		
 	pdb.set_trace()
 	
 	sys.exit(0)
