@@ -123,6 +123,10 @@ if __name__ == '__main__':
 	
 	all_gen = {'HOM':np.array([]), 'WT':np.array([])}
 	
+	times_gen = {'HOM':np.array([]), 'WT':np.array([])}
+	
+	stim_bouts = {'HOM':{'in':np.array([]), 'out':np.array([])}, 'WT':{'in':np.array([]), 'out':np.array([])}}
+	
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
 		
@@ -144,6 +148,11 @@ if __name__ == '__main__':
 		windows   = np.array_split(np.arange(0, bouts.size), min_size)
 		bouts_min = np.zeros((len(windows),))
 		
+		time_btw_bouts = [] 
+		for b in range(len(num_lst) - 1):
+			time_btw_bouts.append(num_lst[b+1][0] - num_lst[b][-1])
+		
+		
 		for i, window in enumerate(windows):
 			idd = np.where(bouts[window] == 1)[0].flatten()
 			bm  = []
@@ -152,13 +161,41 @@ if __name__ == '__main__':
 			bouts_min[i] = len(bm)
 		
 		
+		idd = np.where(bouts == 0)[0].flatten()
+		n_b = [] 
+		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
+			n_b.append(list(map(itemgetter(1), g)))
+		
 		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
 		genotype = match_names[indx][1][1]
 		#print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
 		
 		
 		stim_info = pd.read_csv(os.path.join(main_folder, os.path.join(f_name, 'LaunchFile_' + f_name + '.csv')))
-		start_mov = int(list(stim_info['Fish ID'][stim_info[ f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
+		start_mov = int(list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
+		
+		lst_names    = list(stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotLoc', na=False))
+		unique_names = list(map(lambda x : x [:x.find('.')], np.unique(stim_info[f_name[f_name.find('-') + 2:]][np.where(lst_names)[0]])))
+		dict_stim = {}
+		for name in unique_names:
+			dict_stim[name] = list(map(int, list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains(name, na=False)])))
+		
+		
+		b_stim   = np.zeros((len(dict_stim.keys()), 10))
+		b_n_stim = np.zeros((len(dict_stim.keys()), 10))
+		for i, key in enumerate(dict_stim.keys()):
+			for j, start in enumerate(dict_stim[key]):
+				stim_range   = np.arange(start * fps, (start+3) * fps)
+				n_stim_range = np.arange((start + 3) * fps, (start + 6) * fps)
+				for k in range(len(num_lst)):
+					if num_lst[k][0] in stim_range:
+						b_stim[i][j] += 1
+					elif num_lst[k][0] in n_stim_range:
+						b_n_stim[i][j] += 1
+		
+		
+		stim_bouts[genotype]['in']  = np.append(stim_bouts[genotype]['in'], np.sum(b_stim, axis=1).sum())
+		stim_bouts[genotype]['out'] = np.append(stim_bouts[genotype]['out'], np.sum(b_n_stim, axis=1).sum())
 		
 		# Separate recording sections. 
 		sp_pnt  = np.arange(100, 1750).astype('int')
@@ -176,6 +213,7 @@ if __name__ == '__main__':
 		
 		sec_gen[genotype]['Spontaneous'], sec_gen[genotype]['Light Dot'], sec_gen[genotype]['Moving Dot']  = np.append(sec_gen[genotype]['Spontaneous'], len(sp_lst)), np.append(sec_gen[genotype]['Light Dot'], len(ld_lst)), np.append(sec_gen[genotype]['Moving Dot'], len(mv_lst))
 		all_gen[genotype] = np.append(all_gen[genotype], bouts_min.mean())
+		times_gen[genotype]= np.append(times_gen[genotype], time_btw_bouts)
 		
 		if dpf > 6:
 			genotype = genotype + ' M'

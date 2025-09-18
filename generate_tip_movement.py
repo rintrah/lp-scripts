@@ -153,8 +153,8 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 			indx = np.argmin(np.abs(dtheta), axis= 1)
 			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
 		
-		# savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/bouts-data', fish_name + '-tail-deg.mat'), {'tail':deg_matrix})
-		 
+		savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/bouts-data', fish_name + '-tail-deg.mat'), {'tail':deg_matrix})
+
 		xs_series = xs_arr[:, -1]
 		ys_series = ys_arr[:, -1]
 		
