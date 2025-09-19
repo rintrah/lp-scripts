@@ -27,6 +27,8 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 plt.style.use('../large-scale-analysis/figures.mplstyle')
 
+import seaborn as sns 
+
 from itertools import groupby
 from operator import itemgetter
 
@@ -93,8 +95,9 @@ if __name__ == '__main__':
 	if not os.path.exists(dest_fld):
 		os.makedirs(dest_fld)
 		
-		
-	fps = 500
+	# Parameters of the recording.
+	fps     = 500
+	sec_min = 60 
 	
 	files      = []
 	for p, d, f in os.walk(preds_folder):
@@ -127,9 +130,10 @@ if __name__ == '__main__':
 	
 	stim_bouts = {'HOM':{'in':np.array([]), 'out':np.array([])}, 'WT':{'in':np.array([]), 'out':np.array([])}}
 	
+	df_bouts = [] 
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
-		
+
 		file_data = np.array([x for x in files if fish_name in x]).item()
 		
 		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
@@ -143,7 +147,7 @@ if __name__ == '__main__':
 		f_name   = match_names[indx][1][0]
 		print(f"For fish {f_name} the size of bouts vector is {bouts.size / fps / 60}.")
 		
-		min_size = bouts.size//500//60
+		min_size = bouts.size//fps//sec_min
 		#pdb.set_trace()
 		windows   = np.array_split(np.arange(0, bouts.size), min_size)
 		bouts_min = np.zeros((len(windows),))
@@ -215,9 +219,28 @@ if __name__ == '__main__':
 		all_gen[genotype] = np.append(all_gen[genotype], bouts_min.mean())
 		times_gen[genotype]= np.append(times_gen[genotype], time_btw_bouts)
 		
+		for frame in frames_lst: 
+			df_bouts.append([f_name, genotype, dpf, frame/fps])
+		
+		sp_cnt, ld_cnt, mv_cnt = 0, 0, 0 
+		
+		for x in num_lst:
+			if np.isin(np.array(x[0]), np.arange(100 * fps, 1750 * fps)):
+				sp_cnt += 1
+			elif np.isin(np.array(x[0]), np.arange(1850 * fps, start_mov * fps)):
+				ld_cnt += 1
+			elif np.isin(np.array(x[0]), np.arange(start_mov * fps, 5200 * fps)):
+				mv_cnt += 1
+				
+		print(f"{f_name} has {sp_cnt} during spontaneous activity, {ld_cnt} bouts during light dot, and {mv_cnt} bouts during moving dot.")
+		
+		pdb.set_trace()
+		
+		
+		
 		if dpf > 6:
 			genotype = genotype + ' M'
-		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/500), np.append(bouts_gen[genotype]['Frames'], frames_lst), np.append(bouts_gen[genotype]['Events'], bouts_min.mean())
+		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/fps), np.append(bouts_gen[genotype]['Frames'], frames_lst), np.append(bouts_gen[genotype]['Events'], bouts_min.mean())
 		
 		
 		# # Load the tail points obtained by using Ligthning-Pose.
@@ -266,6 +289,15 @@ if __name__ == '__main__':
 				# ax.plot(ys_arr[k, :], xs_arr[k, :], c=cmap(j))
 			# ax.set_axis_off()
 			# plt.show()
+	
+	df_bouts = pd.DataFrame(df_bouts, columns=['Subject', 'Genotype', 'Dpf', 'Seconds'])
+	
+	df_bouts['dummy'] = 0
+	my_palette = {'HOM': 'r', 'WT': 'b'}
+	fig, ax = plt.subplots()
+	sns.violinplot(data=df_bouts, x='dummy', y='Seconds', split=True, hue='Genotype', ax=ax, palette=my_palette)
+	ax.axes.get_xaxis().set_visible(False)
+	
 	
 	for key in bouts_gen['WT'].keys(): 
 		fig, ax = plt.subplots(figsize=(8, 8))
