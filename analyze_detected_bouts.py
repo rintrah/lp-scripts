@@ -128,7 +128,9 @@ if __name__ == '__main__':
 	
 	times_gen = {'HOM':np.array([]), 'WT':np.array([])}
 	
-	stim_bouts = {'HOM':{'in':np.array([]), 'out':np.array([])}, 'WT':{'in':np.array([]), 'out':np.array([])}}
+	#stim_bouts = {'HOM':{'in':np.array([]), 'out':np.array([])}, 'WT':{'in':np.array([]), 'out':np.array([])}}
+	stim_bouts = {'HOM':{'in':[], 'out':[]}, 'WT':{'in':[], 'out':[]}}
+	
 	
 	df_bouts = [] 
 	for file in filenames:
@@ -185,21 +187,34 @@ if __name__ == '__main__':
 			dict_stim[name] = list(map(int, list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains(name, na=False)])))
 		
 		
-		b_stim   = np.zeros((len(dict_stim.keys()), 10))
-		b_n_stim = np.zeros((len(dict_stim.keys()), 10))
+		b_stim   = {}
+		for i in range(len(dict_stim.keys())): 
+			b_stim.update({str(i): []})
+			
+		b_n_stim = {} 
+		for i in range(len(dict_stim.keys())): 
+			b_n_stim.update({str(i): []})
+			
+		in_stim     = np.zeros((len(dict_stim.keys()), 10))
+		not_in_stim = np.zeros((len(dict_stim.keys()), 10))
+		
 		for i, key in enumerate(dict_stim.keys()):
 			for j, start in enumerate(dict_stim[key]):
-				stim_range   = np.arange(start * fps, (start+3) * fps)
+				stim_range   = np.arange(start * fps, (start + 3) * fps)
 				n_stim_range = np.arange((start + 3) * fps, (start + 6) * fps)
 				for k in range(len(num_lst)):
 					if num_lst[k][0] in stim_range:
-						b_stim[i][j] += 1
+						b_stim[str(i)].append(np.abs(num_lst[k][0] - stim_range[0])/fps)
+						in_stim[i][j] += 1
 					elif num_lst[k][0] in n_stim_range:
-						b_n_stim[i][j] += 1
+						b_n_stim[str(i)].append(np.abs(num_lst[k][0] - n_stim_range[0])/fps)
+						not_in_stim[i][j] += 1
 		
+		# stim_bouts[genotype]['in']  = np.append(stim_bouts[genotype]['in'], in_stim.sum(axis=1))
+		# stim_bouts[genotype]['out'] = np.append(stim_bouts[genotype]['out'], not_in_stim.sum(axis=1))
 		
-		stim_bouts[genotype]['in']  = np.append(stim_bouts[genotype]['in'], np.sum(b_stim, axis=1).sum())
-		stim_bouts[genotype]['out'] = np.append(stim_bouts[genotype]['out'], np.sum(b_n_stim, axis=1).sum())
+		stim_bouts[genotype]['in'].append(in_stim.sum(axis=1))
+		stim_bouts[genotype]['out'].append(not_in_stim.sum(axis=1))
 		
 		# Separate recording sections. 
 		sp_pnt  = np.arange(100, 1750).astype('int')
@@ -233,11 +248,7 @@ if __name__ == '__main__':
 				mv_cnt += 1
 				
 		print(f"{f_name} has {sp_cnt} during spontaneous activity, {ld_cnt} bouts during light dot, and {mv_cnt} bouts during moving dot.")
-		
-		pdb.set_trace()
-		
-		
-		
+
 		if dpf > 6:
 			genotype = genotype + ' M'
 		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/fps), np.append(bouts_gen[genotype]['Frames'], frames_lst), np.append(bouts_gen[genotype]['Events'], bouts_min.mean())
@@ -293,10 +304,16 @@ if __name__ == '__main__':
 	df_bouts = pd.DataFrame(df_bouts, columns=['Subject', 'Genotype', 'Dpf', 'Seconds'])
 	
 	df_bouts['dummy'] = 0
-	my_palette = {'HOM': 'r', 'WT': 'b'}
+	my_palette = {'HOM': '#B2182B', 'WT': '#053061'}
 	fig, ax = plt.subplots()
 	sns.violinplot(data=df_bouts, x='dummy', y='Seconds', split=True, hue='Genotype', ax=ax, palette=my_palette)
-	ax.axes.get_xaxis().set_visible(False)
+	#ax.axes.get_xaxis().set_visible(False)
+	ax.set_xticks([])
+	ax.legend(frameon=False)
+	ax.set_xlabel('Density')
+	ax.set(ylabel='Duration of bouts [s]')
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
 	
 	
 	for key in bouts_gen['WT'].keys(): 
@@ -366,7 +383,61 @@ if __name__ == '__main__':
 	print(f"For section {key} the p-value is {pvalue}.")
 	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-min-during-recording-larva.png")	, dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
-		
+	
+	
+	my_palette = {'HOM': '#F4A582' ,'HOM M': '#D6604D', 'WT': '#92C5DE', 'WT M': '#4393C3'}
+	
+	df = [] 
+	for key in bouts_gen.keys():
+		for i in range(bouts_gen[key]['Seconds'].size):
+			df.append([key, bouts_gen[key]['Seconds'][i]])
+	
+	df = pd.DataFrame(df, columns=['Genotype', 'Seconds'])
+	
+	dummy_df = df[np.logical_or(df['Genotype']=='HOM', df['Genotype'] == 'WT')]
+	dummy_df['dummy'] = 0
+	fig, ax = plt.subplots()
+	sns.violinplot(data=dummy_df, x='dummy', y='Seconds', split=True, hue='Genotype', ax=ax, palette=my_palette)
+	#ax.axes.get_xaxis().set_visible(False)
+	ax.set_xticks([])
+	ax.legend(frameon=False)
+	ax.set_xlabel('Density')
+	ax.set(ylabel='Duration of bouts [s]')
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-young-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
+	
+	# Violin plots of age groups. 
+	
+	dummy_df = df[np.logical_or(df['Genotype']=='HOM M', df['Genotype'] == 'WT M')]
+	dummy_df['dummy'] = 0
+	fig, ax = plt.subplots()
+	sns.violinplot(data=dummy_df, x='dummy', y='Seconds', split=True, hue='Genotype', ax=ax, palette=my_palette)
+	#ax.axes.get_xaxis().set_visible(False)
+	ax.set_xticks([])
+	ax.legend(frameon=False)
+	ax.set_xlabel('Density')
+	ax.set(ylabel='Duration of bouts [s]')
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-older-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
+	
+	hom_v, wt_v = np.vstack(stim_bouts['HOM']['in']).mean(axis=0), np.vstack(stim_bouts['WT']['in']).mean(axis=0)
+	
+	fig, ax = plt.subplots(figsize=(8, 8))
+	ax.bar([1, 2], [hom_v.mean(), wt_v.mean()], facecolor='none', edgecolor='black', linewidth=3)
+	ax.scatter(vectorize_jitter(1 * np.ones((hom_v.size, )), 0.1), hom_v, alpha=0.5, color='red')
+	ax.scatter(vectorize_jitter(2 * np.ones((wt_v.size, )), 0.1), wt_v, alpha=0.5, color='blue')
+	ax.set(xlabel="Genotype", ylabel=f"# bouts after stimulation")
+	ax.set_xticks([1, 2])
+	ax.set_xticklabels(['fmr1-/-', 'wild type'])
+	stats, pvalue = mannwhitneyu(hom_v, wt_v)
+	bottom, top = ax.get_ylim()
+	ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
+	ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
+	print(f"For the average bouts for each stimulus the p-value is {pvalue}.")
+	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-after-stimulation-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
+	
+	
 	pdb.set_trace()
 	
 	sys.exit(0)
