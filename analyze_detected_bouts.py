@@ -72,6 +72,12 @@ def rand_jitter(x:int, stdev:float):
 
 def vectorize_jitter(x:np.ndarray, stdev:float):
 	return np.vectorize(rand_jitter)(x, stdev)
+	
+def plot_sec_angle(df:pd.DataFrame, my_palette:dict, dest_fld:str, age:str):
+	fig, ax = plt.subplots(figsize=(8, 8))
+	sns.kdeplot(data=df, x="Seconds", y="Angle", hue="Genotype", fill=True, palette=my_palette, alpha=0.3)
+	plt.savefig(os.path.join(dest_fld, f"scatter-sec-angle-{age}-larvae.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
 
 if __name__ == '__main__':
 	if sys.platform == 'linux' or sys.platform == 'linux2':
@@ -108,7 +114,8 @@ if __name__ == '__main__':
 				else:
 					files.append(os.path.join(p, file))
 
-	bouts_folder = preds_folder + 'bouts-data/'
+	bouts_folder  = preds_folder + 'bouts-data/'
+	degree_folder = preds_folder + 'degree-data/'
 	
 	filenames = next(os.walk(bouts_folder))[2]
 	
@@ -133,31 +140,59 @@ if __name__ == '__main__':
 	
 	
 	df_bouts = [] 
+	test     = [] 
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
+		
+		# There is a difference between the name of the Video file and the one of the Calcium file.
+		# Because of this, we look for the Calcium file that matches the Video files.
+		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
+		f_name   = match_names[indx][1][0]
 
 		file_data = np.array([x for x in files if fish_name in x]).item()
+		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
+		genotype = match_names[indx][1][1]
+		#print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
 		
-		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
+
+
+		
+		# Bouts is a binary array. 
 		bouts = loadmat(os.path.join(bouts_folder, file))['bouts'].flatten()
-		
-		idd   = np.where(bouts == 1)[0].flatten()
-		num_lst = [] 
-		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
-			num_lst.append(list(map(itemgetter(1), g)))
-		
-		f_name   = match_names[indx][1][0]
+		# Check the size in frames of the bout vector.
 		print(f"For fish {f_name} the size of bouts vector is {bouts.size / fps / 60}.")
 		
+
+		
+		# We want to compare the length of the bouts with the maximum tail angle.
+		deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-deg.mat'))['tail']
+		deg_data = np.abs(deg_data[:, -1])
+		
+		# Here we find consecutive ones.
+		idd     = np.where(bouts == 1)[0].flatten()
+		num_lst = [] 
+		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
+			tmp_range = list(map(itemgetter(1), g))
+			if np.max(deg_data[tmp_range]) < 200:
+				num_lst.append(tmp_range)
+				test.append([f_name, dpf, genotype, len(num_lst[-1])/fps, np.max(deg_data[num_lst[-1]])])
+			
+			# if np.max(deg_data[tmp_range]) > 100:
+				# deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-deg.mat'))['tail']
+				# cmap = plt.get_cmap('coolwarm', 100)
+				# norm = colors.Normalize(tmp_range[0], tmp_range[-1])
+				# for i in tmp_range: 
+					# plt.plot(deg_data[i, :], c=cmap(norm(i)), alpha=0.3)
+				# plt.show()
+			
 		min_size = bouts.size//fps//sec_min
-		#pdb.set_trace()
+		
 		windows   = np.array_split(np.arange(0, bouts.size), min_size)
 		bouts_min = np.zeros((len(windows),))
 		
 		time_btw_bouts = [] 
 		for b in range(len(num_lst) - 1):
 			time_btw_bouts.append(num_lst[b+1][0] - num_lst[b][-1])
-		
 		
 		for i, window in enumerate(windows):
 			idd = np.where(bouts[window] == 1)[0].flatten()
@@ -171,11 +206,7 @@ if __name__ == '__main__':
 		n_b = [] 
 		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
 			n_b.append(list(map(itemgetter(1), g)))
-		
-		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
-		genotype = match_names[indx][1][1]
-		#print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
-		
+
 		
 		stim_info = pd.read_csv(os.path.join(main_folder, os.path.join(f_name, 'LaunchFile_' + f_name + '.csv')))
 		start_mov = int(list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
@@ -252,54 +283,16 @@ if __name__ == '__main__':
 		if dpf > 6:
 			genotype = genotype + ' M'
 		bouts_gen[genotype]['Seconds'], bouts_gen[genotype]['Frames'], bouts_gen[genotype]['Events']  = np.append(bouts_gen[genotype]['Seconds'], frames_lst/fps), np.append(bouts_gen[genotype]['Frames'], frames_lst), np.append(bouts_gen[genotype]['Events'], bouts_min.mean())
-		
-		
-		# # Load the tail points obtained by using Ligthning-Pose.
-		# df           = pd.read_csv(file_data, header=[1, 2], index_col=0)
-		# keypoints_arr = np.reshape(df.to_numpy(), [df.shape[0], -1, 3])
-		# # xs_tmp = keypoints_arr[:, :, 0]
-		# # ys_tmp = keypoints_arr[:, :, 1] 
-		# T = keypoints_arr.shape[0]
-
-		# alpha          = np.linspace(0, 1, 100)
-		# xs_arr, ys_arr = np.zeros((T, alpha.size)), np.zeros((T, alpha.size))
-		
-		# R = rot_matrix(50)
-		
-		# for i in range(T):
-			# points   = keypoints_arr[i, :, :2]
-			# distance = np.cumsum( np.sqrt(np.sum( np.diff(points, axis=0)**2, axis=1 )) )
-			# distance = np.insert(distance, 0, 0)/distance[-1]
-			
-			# # Interpolate the points used in Lightning-Pose using a quadratic interpolator.
-			# interpolator        = interp1d(distance, points, kind='quadratic', axis=0)
-			# interpolated_points = interpolator(alpha)
-			# # Rotate the points. 
-			# #interpolated_points = np.matmul(interpolated_points[:, :2], R)
-			# xs_arr[i, :], ys_arr[i, :] =  interpolated_points[:, 0],  interpolated_points[:, 1]
-			# del interpolator, interpolated_points, distance, points
-
-		# # Make sure that the uppermost part of the tail is centered at (0, 0). 
-		# # I think the problem is here.  
-		# for i in range(T):
-			# xs_arr[i, :] -= xs_arr[i, 0]
-			# ys_arr[i, :] -= ys_arr[i, 0]
-		
-		# for i in range(T):
-			# points         = np.array([xs_arr[i, :], ys_arr[i, :]])
-			# rotated_points = np.matmul(R, points).T
-			# xs_arr[i, :], ys_arr[i, :] = rotated_points[:, 0], rotated_points[:, 1]
-			# del points, rotated_points
-		
-		# for i in range(len(num_lst)):
-			# f_bout = num_lst[i]
-			# n_tp   = len(f_bout) 
-			# cmap   = plt.get_cmap('winter_r', n_tp)
-			# fig, ax = plt.subplots(figsize=(8,8))
-			# for j, k in enumerate(f_bout):
-				# ax.plot(ys_arr[k, :], xs_arr[k, :], c=cmap(j))
-			# ax.set_axis_off()
-			# plt.show()
+	
+	df_info = pd.DataFrame(test, columns=['Subject', 'Dpf', 'Genotype', 'Seconds', 'Angle'])
+	
+	m_df = df_info[df_info['Dpf'] > 6]
+	my_palette = {'HOM':'#D6604D', 'WT': '#4393C3'}
+	plot_sec_angle(m_df, my_palette, dest_fld, 'mature')
+	
+	y_df = df_info[df_info['Dpf'] < 7]
+	my_palette = {'HOM': '#F4A582', 'WT': '#92C5DE'}
+	plot_sec_angle(y_df, my_palette, dest_fld, 'young')
 	
 	df_bouts = pd.DataFrame(df_bouts, columns=['Subject', 'Genotype', 'Dpf', 'Seconds'])
 	
