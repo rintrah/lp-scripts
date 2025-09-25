@@ -141,9 +141,12 @@ if __name__ == '__main__':
 	
 	df_bouts = [] 
 	test     = [] 
+	
+	lat_dict = {} 
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
 		
+		lat_dict[fish_name] = []
 		# There is a difference between the name of the Video file and the one of the Calcium file.
 		# Because of this, we look for the Calcium file that matches the Video files.
 		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
@@ -211,12 +214,11 @@ if __name__ == '__main__':
 		stim_info = pd.read_csv(os.path.join(main_folder, os.path.join(f_name, 'LaunchFile_' + f_name + '.csv')))
 		start_mov = int(list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
 		
-		lst_names    = list(stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotLoc', na=False))
+		lst_names    = list(stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False))
 		unique_names = list(map(lambda x : x [:x.find('.')], np.unique(stim_info[f_name[f_name.find('-') + 2:]][np.where(lst_names)[0]])))
 		dict_stim = {}
 		for name in unique_names:
 			dict_stim[name] = list(map(int, list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains(name, na=False)])))
-		
 		
 		b_stim   = {}
 		for i in range(len(dict_stim.keys())): 
@@ -228,6 +230,8 @@ if __name__ == '__main__':
 			
 		in_stim     = np.zeros((len(dict_stim.keys()), 10))
 		not_in_stim = np.zeros((len(dict_stim.keys()), 10))
+		
+		stim_duration = 10 # 3 # in seconds.
 		
 		for i, key in enumerate(dict_stim.keys()):
 			for j, start in enumerate(dict_stim[key]):
@@ -243,6 +247,7 @@ if __name__ == '__main__':
 		
 		# stim_bouts[genotype]['in']  = np.append(stim_bouts[genotype]['in'], in_stim.sum(axis=1))
 		# stim_bouts[genotype]['out'] = np.append(stim_bouts[genotype]['out'], not_in_stim.sum(axis=1))
+		lat_dict[fish_name].append(b_stim)
 		
 		stim_bouts[genotype]['in'].append(in_stim.sum(axis=1))
 		stim_bouts[genotype]['out'].append(not_in_stim.sum(axis=1))
