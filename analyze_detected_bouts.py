@@ -47,6 +47,8 @@ from scipy.signal import resample
 
 from decimal import Decimal
 
+import h5py
+
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
 ('2021-07-16-11-32-30', ('20210716-f1', 'WT')), ('2021-08-27-11-46-32' ,('20210827-f1', 'HOM')), ('2021-09-21-11-37-35', ('20210921-f1', 'WT')), ('2021-10-13-10-44-34', ('20211013-f1', 'HOM')),
@@ -142,11 +144,10 @@ if __name__ == '__main__':
 	df_bouts = [] 
 	test     = [] 
 	
-	lat_dict = {} 
+	lat_dict = {'HOM':[], 'WT':[]} 
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
 		
-		lat_dict[fish_name] = []
 		# There is a difference between the name of the Video file and the one of the Calcium file.
 		# Because of this, we look for the Calcium file that matches the Video files.
 		indx  = np.argwhere(np.array([x[0] for x in match_names]) == fish_name).item()
@@ -155,17 +156,15 @@ if __name__ == '__main__':
 		file_data = np.array([x for x in files if fish_name in x]).item()
 		dpf      = fish_info.loc[(fish_info['date']== int(''.join(c for c in f_name[:f_name.find('-')] if c.isdigit()))) & (fish_info['fish-num'] == int(''.join(c for c in f_name[(f_name.find('-')+2):]))), 'dpf'].item()
 		genotype = match_names[indx][1][1]
-		#print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
-		
-
-
+		print(f"Genotype is {genotype} and dpf is {dpf} for fish {fish_name}.")
 		
 		# Bouts is a binary array. 
+		# if f_name == '20211118-f11':
+			# bouts = h5py.File(os.path.join(bouts_folder, file))['bouts'][:].flatten()
+		# else:
 		bouts = loadmat(os.path.join(bouts_folder, file))['bouts'].flatten()
 		# Check the size in frames of the bout vector.
 		print(f"For fish {f_name} the size of bouts vector is {bouts.size / fps / 60}.")
-		
-
 		
 		# We want to compare the length of the bouts with the maximum tail angle.
 		deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-deg.mat'))['tail']
@@ -204,12 +203,10 @@ if __name__ == '__main__':
 				bm.append(list(map(itemgetter(1), g)))
 			bouts_min[i] = len(bm)
 		
-		
 		idd = np.where(bouts == 0)[0].flatten()
 		n_b = [] 
 		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
 			n_b.append(list(map(itemgetter(1), g)))
-
 		
 		stim_info = pd.read_csv(os.path.join(main_folder, os.path.join(f_name, 'LaunchFile_' + f_name + '.csv')))
 		start_mov = int(list(stim_info['Fish ID'][stim_info[f_name[f_name.find('-') + 2:]].str.contains('DarkSpotSpeed', na=False)])[0])
@@ -235,22 +232,24 @@ if __name__ == '__main__':
 		
 		for i, key in enumerate(dict_stim.keys()):
 			for j, start in enumerate(dict_stim[key]):
-				stim_range   = np.arange(start * fps, (start + 3) * fps)
-				n_stim_range = np.arange((start + 3) * fps, (start + 6) * fps)
+				stim_range   = np.arange(start * fps, (start + stim_duration) * fps)
+				n_stim_range = np.arange((start + stim_duration) * fps, ((start + stim_duration) + stim_duration) * fps)
 				for k in range(len(num_lst)):
 					if num_lst[k][0] in stim_range:
-						b_stim[str(i)].append(np.abs(num_lst[k][0] - stim_range[0])/fps)
-						in_stim[i][j] += 1
+						b_stim[str(i)].append((num_lst[k][0] - stim_range[0])/fps)
+						if in_stim[i][j] == 0:
+							in_stim[i][j] = 1
 					elif num_lst[k][0] in n_stim_range:
 						b_n_stim[str(i)].append(np.abs(num_lst[k][0] - n_stim_range[0])/fps)
-						not_in_stim[i][j] += 1
+						if not_in_stim[i][j] == 0:
+							not_in_stim[i][j] = 1
 		
 		# stim_bouts[genotype]['in']  = np.append(stim_bouts[genotype]['in'], in_stim.sum(axis=1))
 		# stim_bouts[genotype]['out'] = np.append(stim_bouts[genotype]['out'], not_in_stim.sum(axis=1))
-		lat_dict[fish_name].append(b_stim)
+		lat_dict[genotype].append(b_stim)
 		
-		stim_bouts[genotype]['in'].append(in_stim.sum(axis=1))
-		stim_bouts[genotype]['out'].append(not_in_stim.sum(axis=1))
+		stim_bouts[genotype]['in'].append(in_stim.sum() / 80)
+		stim_bouts[genotype]['out'].append(not_in_stim.sum() / 80)
 		
 		# Separate recording sections. 
 		sp_pnt  = np.arange(100, 1750).astype('int')
@@ -418,7 +417,10 @@ if __name__ == '__main__':
 	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-older-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
-	hom_v, wt_v = np.vstack(stim_bouts['HOM']['in']).mean(axis=0), np.vstack(stim_bouts['WT']['in']).mean(axis=0)
+	
+	hom_v, wt_v = stim_bouts['HOM']['in'], stim_bouts['WT']['in']
+	
+	pdb.set_trace()
 	
 	fig, ax = plt.subplots(figsize=(8, 8))
 	ax.bar([1, 2], [hom_v.mean(), wt_v.mean()], facecolor='none', edgecolor='black', linewidth=3)
