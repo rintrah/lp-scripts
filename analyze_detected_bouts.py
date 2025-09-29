@@ -46,6 +46,7 @@ from scipy.interpolate import make_splprep, interp1d
 from scipy.signal import resample
 
 from decimal import Decimal
+import pingouin as pg
 
 import h5py
 
@@ -142,8 +143,9 @@ if __name__ == '__main__':
 	
 	
 	df_bouts = [] 
+	df_stim  = [] 
 	test     = [] 
-	
+	df_lat   = [] 
 	lat_dict = {'HOM':[], 'WT':[]} 
 	for file in filenames:
 		fish_name = file.replace('-bouts.mat', '')
@@ -175,7 +177,7 @@ if __name__ == '__main__':
 		num_lst = [] 
 		for k, g in groupby(enumerate(idd), lambda ix : ix[0] - ix[1]): 
 			tmp_range = list(map(itemgetter(1), g))
-			if np.max(deg_data[tmp_range]) < 200:
+			if np.max(deg_data[tmp_range]) < 260:
 				num_lst.append(tmp_range)
 				test.append([f_name, dpf, genotype, len(num_lst[-1])/fps, np.max(deg_data[num_lst[-1]])])
 			
@@ -237,6 +239,7 @@ if __name__ == '__main__':
 				for k in range(len(num_lst)):
 					if num_lst[k][0] in stim_range:
 						b_stim[str(i)].append((num_lst[k][0] - stim_range[0])/fps)
+						df_lat.append([f_name, dpf, genotype, key, (num_lst[k][0] - stim_range[0])/fps])  # ['Subject', 'Dpf', 'Genotype', 'Stimulus', 'Latency']
 						if in_stim[i][j] == 0:
 							in_stim[i][j] = 1
 					elif num_lst[k][0] in n_stim_range:
@@ -250,6 +253,8 @@ if __name__ == '__main__':
 		
 		stim_bouts[genotype]['in'].append(in_stim.sum() / 80)
 		stim_bouts[genotype]['out'].append(not_in_stim.sum() / 80)
+		
+		df_stim.append([f_name, dpf, genotype, in_stim.sum() / 80]) # ['Subject', 'Dpf', 'Genotype', 'Frequency']
 		
 		# Separate recording sections. 
 		sp_pnt  = np.arange(100, 1750).astype('int')
@@ -418,9 +423,7 @@ if __name__ == '__main__':
 	plt.close('all')
 	
 	
-	hom_v, wt_v = stim_bouts['HOM']['in'], stim_bouts['WT']['in']
-	
-	pdb.set_trace()
+	hom_v, wt_v = np.array(stim_bouts['HOM']['in']), np.array(stim_bouts['WT']['in'])
 	
 	fig, ax = plt.subplots(figsize=(8, 8))
 	ax.bar([1, 2], [hom_v.mean(), wt_v.mean()], facecolor='none', edgecolor='black', linewidth=3)
@@ -438,6 +441,15 @@ if __name__ == '__main__':
 	plt.close('all')
 	
 	
+	dict_gen  = {'HOM':np.array([]), 'WT': np.array([])}
+	
+	for gen in lat_dict.keys():
+		for i in range(len(lat_dict[gen])):
+			for stim in lat_dict[gen][i].keys():
+				dict_gen[gen] = np.append(dict_gen[gen], lat_dict[gen][i][stim])
+	
+	stim_df = pd.DataFrame(df_stim, columns= ['Subject', 'Dpf', 'Genotype', 'Frequency'])
+	df_lat  = pd.DataFrame(df_lat, columns= ['Subject', 'Dpf', 'Genotype', 'Stimulus', 'Latency'])
 	pdb.set_trace()
 	
 	sys.exit(0)
