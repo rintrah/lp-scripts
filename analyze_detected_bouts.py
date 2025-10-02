@@ -81,6 +81,27 @@ def plot_sec_angle(df:pd.DataFrame, my_palette:dict, dest_fld:str, age:str):
 	sns.kdeplot(data=df, x="Seconds", y="Angle", hue="Genotype", fill=True, palette=my_palette, alpha=0.3)
 	plt.savefig(os.path.join(dest_fld, f"scatter-sec-angle-{age}-larvae.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
+	
+def render_pvalue_string(pval):
+    """
+    Generate a formatted p-value string.
+
+    If pval < 0.01, the function returns a string in the format "p=10^{exponent}",
+    where the exponent is the ceiling of the base-10 logarithm of pval.
+    Otherwise, it returns the p-value formatted to two decimal places.
+    
+    Parameters:
+        pval (float): The p-value.
+        
+    Returns:
+        str: The formatted p-value string.
+    """
+    if pval < 0.01:
+        exponent = str(np.int32(np.ceil(np.log10(pval))))
+        pstring = f"p=10^{exponent}"
+    else:
+        pstring = f"p={pval:.2f}"
+    return pstring
 
 if __name__ == '__main__':
 	if sys.platform == 'linux' or sys.platform == 'linux2':
@@ -450,6 +471,32 @@ if __name__ == '__main__':
 	
 	stim_df = pd.DataFrame(df_stim, columns= ['Subject', 'Dpf', 'Genotype', 'Frequency'])
 	df_lat  = pd.DataFrame(df_lat, columns= ['Subject', 'Dpf', 'Genotype', 'Stimulus', 'Latency'])
+	
+	params = {'axes.labelsize': 8.0}
+	plt.rcParams.update(params)
+	
+	wt = df_lat[df_lat['Genotype'] == 'WT']['Latency'].values
+	fmr1 = df_lat[df_lat['Genotype'] == 'HOM']['Latency'].values
+	fig, ax = plt.subplots(figsize=(2, 2))
+	ax.bar([1, 2], [np.nanmean(wt), np.nanmean(fmr1)], facecolor='none', edgecolor='black', linewidth=2, width=0.5)
+	ax.errorbar([1, 2], [np.nanmean(wt), np.nanmean(fmr1)], yerr=[np.nanstd(wt), np.nanstd(fmr1)], ecolor='black', linestyle='', lw=2)
+	# ax.scatter(vectorize_jitter(np.ones((len(neurons_assemblies['WT'], ))), 0.1), neurons_assemblies['WT'], alpha=0.5, color=color_wt, s=1)
+	# ax.scatter(vectorize_jitter(2*np.ones((len(neurons_assemblies['HOM']), )), 0.1), neurons_assemblies['HOM'], alpha=0.5, color=color_hom, s=1)
+	U, p_val = mannwhitneyu(wt, fmr1)
+	pstring= render_pvalue_string(p_val)
+	print(f"p-value = {p_val}.")
+	ymin, ymax = ax.get_ylim()
+	ax.text(1.15, ymax +  0.5, pstring)
+	ax.set_ylim([0, ymax+ 1])
+	ax.set_xticks([1, 2])
+	ax.set_xticklabels(['+/+', '-/-'])
+	ax.set(xlabel='Genotype', ylabel='Start of bout after stimulus [s]')
+	ax.spines[['top','right']].set_visible(False)
+	ax.spines[['left','bottom']].set_linewidth(2)
+	ax.tick_params(direction='in',width=1)
+	plt.savefig(os.path.join(dest_fld, f"comparison-latency-bouts-after-stimulation-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.close('all')
+	
 	pdb.set_trace()
 	
 	sys.exit(0)
