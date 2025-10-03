@@ -129,99 +129,107 @@ def plot_trajectory(files:list, fps:int, dest_fld:str)->pd.DataFrame:
 			rotated_points = np.matmul(R, points).T
 			xs_arr[i, :], ys_arr[i, :] = rotated_points[:, 0], rotated_points[:, 1]
 			del points, rotated_points
-
-
-		# fig, ax = plt.subplots(figsize=(8, 8))
-		# for i in range(T):
-			# ax.plot(xs_arr[i, 0], ys_arr[i, 0], '-', alpha=0.5)
-		# plt.show()
+		
+		coords = []
+		coords.append(xs_arr)
+		coords.append(ys_arr)
+		coors = np.array(coords)
+		coords = np.transpose(coords, [1, 2, 0])
+		
+		#savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/tail-coords', fish_name + '-tail-coords.mat'), {'tail_coords':coords})
+		
+		# # fig, ax = plt.subplots(figsize=(8, 8))
+		# # for i in range(T):
+			# # ax.plot(xs_arr[i, 0], ys_arr[i, 0], '-', alpha=0.5)
+		# # plt.show()
 			
-		dx         = -np.diff(xs_arr, 1, axis=1)
-		dy         = -np.diff(ys_arr, 1, axis=1)
-		rad_ang    = np.arctan2(dy, dx)
-		deg_matrix = np.rad2deg(rad_ang)
+		# dx         = -np.diff(xs_arr, 1, axis=1)
+		# dy         = -np.diff(ys_arr, 1, axis=1)
+		# rad_ang    = np.arctan2(dy, dx)
+		# deg_matrix = np.rad2deg(rad_ang)
 		
-		vfunc = np.vectorize(wrap180)
-		for i in range(deg_matrix.shape[1]):
-			deg_matrix[:, i] = vfunc(deg_matrix[:, i])
+		# vfunc = np.vectorize(wrap180)
+		# for i in range(deg_matrix.shape[1]):
+			# deg_matrix[:, i] = vfunc(deg_matrix[:, i])
 		
 		
-		for i in np.arange(1, deg_matrix.shape[1]):
-			dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
-						deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
-						deg_matrix[:, i] - deg_matrix[:, i-1] - 360]).T
-			indx = np.argmin(np.abs(dtheta), axis= 1)
-			deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
+		# for i in np.arange(1, deg_matrix.shape[1]):
+			# dtheta = np.array([deg_matrix[:, i] - deg_matrix[:, i-1], 
+						# deg_matrix[:, i] - deg_matrix[:, i-1] + 360,
+						# deg_matrix[:, i] - deg_matrix[:, i-1] - 360]).T
+			# indx = np.argmin(np.abs(dtheta), axis= 1)
+			# deg_matrix[:, i] = deg_matrix[:, i - 1] + np.take_along_axis(dtheta, indx[:, None], axis=1).flatten()
 		
-		savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/bouts-data', fish_name + '-tail-deg.mat'), {'tail':deg_matrix})
+		# #savemat(os.path.join('/home/enrique/lp-one-photon/outputs/2025-04-23/12:16:48/video_preds/bouts-data', fish_name + '-tail-deg.mat'), {'tail':deg_matrix})
 
-		xs_series = xs_arr[:, -1]
-		ys_series = ys_arr[:, -1]
+		# xs_series = xs_arr[:, -1]
+		# ys_series = ys_arr[:, -1]
 		
-		xs_ds   = resample(xs_series, xs_series.size // fps)
-		ys_ds   = resample(ys_series, ys_series.size // fps)
-		deg_ang = resample(deg_matrix[:, -1], deg_matrix[:, -1].size // fps) #np.rad2deg(rad_ang[:, -1])
+		# xs_ds   = resample(xs_series, xs_series.size // fps)
+		# ys_ds   = resample(ys_series, ys_series.size // fps)
+		# deg_ang = resample(deg_matrix[:, -1], deg_matrix[:, -1].size // fps) #np.rad2deg(rad_ang[:, -1])
 		
-		# Add tail tip angles.
-		fish_angles[fish_id].append(deg_ang)
+		# # Add tail tip angles.
+		# fish_angles[fish_id].append(deg_ang)
 		
-		xs_matrix = np.zeros((xs_series.size // fps, xs_arr.shape[1]))
-		ys_matrix = np.zeros((ys_series.size // fps, ys_arr.shape[1]))
-		
-		
-		for i in range(xs_arr.shape[1]):
-			xs_matrix[:, i] = resample(xs_arr[:, i], xs_series.size // fps)
-			ys_matrix[:, i] = resample(ys_arr[:, i], ys_series.size // fps)
-		
-		#mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
-		
-		#movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
+		# xs_matrix = np.zeros((xs_series.size // fps, xs_arr.shape[1]))
+		# ys_matrix = np.zeros((ys_series.size // fps, ys_arr.shape[1]))
 		
 		
-		for angle in deg_ang:
-			df_ang.append([fish_id, genotype, angle])
+		# for i in range(xs_arr.shape[1]):
+			# xs_matrix[:, i] = resample(xs_arr[:, i], xs_series.size // fps)
+			# ys_matrix[:, i] = resample(ys_arr[:, i], ys_series.size // fps)
 		
-		#val_range = np.linspace(np.nanmin(deg_ang), np.nanmax(deg_ang), 100)
-		cmap      = plt.get_cmap('coolwarm', 100)
-		norm      = colors.Normalize(np.nanmin(deg_ang), np.nanmax(deg_ang))
+		# #mean, sd  = np.nanmean(deg_ang), np.nanstd(deg_ang)
 		
-		# Running average.
-		#y = savgol_filter(ys_ds, window_length=sec, polyorder=0)
-		#y = savgol_filter(ys_matrix[:, 0], window_length=sec, polyorder=0)
+		# #movs = np.union1d(np.where(deg_ang > mean + sd)[0].flatten(), np.where(deg_ang < mean - sd)[0].flatten())
 		
-		# fig = plt.figure(figsize=(8, 8))
-		# gs  = fig.add_gridspec(3,3)
-		# ax1 = fig.add_subplot(gs[0, :])
-		# ax2 = fig.add_subplot(gs[1:, :2])
-		# ax3 = fig.add_subplot(gs[1:, 2])
 		
-		# #ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
-		# ax1.plot(np.arange(0, deg_ang.size)/sec, deg_ang, color='#7570b3', linewidth=2)
-		# ax1.set(xlabel="Time [m]", ylabel=r"Tail angle ($\circ$)")
+		# for angle in deg_ang:
+			# df_ang.append([fish_id, genotype, angle])
 		
-		# for i in range(xs_matrix.shape[0]):
-			# ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
-		# im = ax2.scatter(xs_ds, ys_ds, c=cmap(norm(deg_ang)))
-		# #ax2.yaxis.set_inverted(True)
-		# ax2.set_axis_off() 
-		# divider = make_axes_locatable(ax2)
-		# cax = divider.append_axes('right', size='5%', pad=0.05)
-		# fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='vertical')
+		# #val_range = np.linspace(np.nanmin(deg_ang), np.nanmax(deg_ang), 100)
+		# cmap      = plt.get_cmap('coolwarm', 100)
+		# norm      = colors.Normalize(np.nanmin(deg_ang), np.nanmax(deg_ang))
 		
-		# ax3.hist(deg_ang, bins='fd', edgecolor='none', facecolor='#7570b3')
-		# ax3.set(xlabel=r"Tail angle ($\circ$)", ylabel="# count")
+		# # Running average.
+		# #y = savgol_filter(ys_ds, window_length=sec, polyorder=0)
+		# #y = savgol_filter(ys_matrix[:, 0], window_length=sec, polyorder=0)
 		
-		# fig.tight_layout()
-		# plt.suptitle(f"Fish {fish_id} ({genotype})")
-		# #pdb.set_trace()
-		# plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
-		# plt.close('all')
+		# # fig = plt.figure(figsize=(8, 8))
+		# # gs  = fig.add_gridspec(3,3)
+		# # ax1 = fig.add_subplot(gs[0, :])
+		# # ax2 = fig.add_subplot(gs[1:, :2])
+		# # ax3 = fig.add_subplot(gs[1:, 2])
 		
-		# plt.scatter(xs_ds, ys_ds - y, s=5)
-		# plt.gca().invert_yaxis()
-		# plt.show()
-		# pdb.set_trace()
+		# # #ax1.plot(np.arange(0, y.size)/sec, ys_ds - y, color='#7570b3', linewidth=2)
+		# # ax1.plot(np.arange(0, deg_ang.size)/sec, deg_ang, color='#7570b3', linewidth=2)
+		# # ax1.set(xlabel="Time [m]", ylabel=r"Tail angle ($\circ$)")
+		
+		# # for i in range(xs_matrix.shape[0]):
+			# # ax2.plot(xs_matrix[i, :], ys_matrix[i, :], color='#bbbbbb', alpha=0.2)
+		# # im = ax2.scatter(xs_ds, ys_ds, c=cmap(norm(deg_ang)))
+		# # #ax2.yaxis.set_inverted(True)
+		# # ax2.set_axis_off() 
+		# # divider = make_axes_locatable(ax2)
+		# # cax = divider.append_axes('right', size='5%', pad=0.05)
+		# # fig.colorbar(cm.ScalarMappable(norm=norm, cmap=cmap), cax=cax, orientation='vertical')
+		
+		# # ax3.hist(deg_ang, bins='fd', edgecolor='none', facecolor='#7570b3')
+		# # ax3.set(xlabel=r"Tail angle ($\circ$)", ylabel="# count")
+		
+		# # fig.tight_layout()
+		# # plt.suptitle(f"Fish {fish_id} ({genotype})")
+		# # #pdb.set_trace()
+		# # plt.savefig(os.path.join(dest_fld, f"fish-{fish_name}-tail-tracking-results.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		# # plt.close('all')
+		
+		# # plt.scatter(xs_ds, ys_ds - y, s=5)
+		# # plt.gca().invert_yaxis()
+		# # plt.show()
+		# # pdb.set_trace()
 	
+	pdb.set_trace()
 	df_ang = pd.DataFrame(df_ang, columns=['Fish',  'Genotype',  'Angle'])
 	
 	return df_ang
