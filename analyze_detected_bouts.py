@@ -50,6 +50,10 @@ import pingouin as pg
 
 import h5py
 
+from datetime import date 
+
+date_file = date.today().strftime("%B_%d_%Y").replace('_', '-')
+
 # Matching names.
 match_names = [('2021-06-08-14-54-59', ('20210608-f1', 'WT')), ('2021-06-25-15-21-37' ,('20210625-f2', 'HOM')), ('2021-07-06-13-48-55', ('20210706-f1', 'WT')), ('2021-07-13-12-49-43', ('20210713-f1', 'WT')),
 ('2021-07-16-11-32-30', ('20210716-f1', 'WT')), ('2021-08-27-11-46-32' ,('20210827-f1', 'HOM')), ('2021-09-21-11-37-35', ('20210921-f1', 'WT')), ('2021-10-13-10-44-34', ('20211013-f1', 'HOM')),
@@ -79,7 +83,7 @@ def vectorize_jitter(x:np.ndarray, stdev:float):
 def plot_sec_angle(df:pd.DataFrame, my_palette:dict, dest_fld:str, age:str):
 	fig, ax = plt.subplots(figsize=(8, 8))
 	sns.kdeplot(data=df, x="Seconds", y="Angle", hue="Genotype", fill=True, palette=my_palette, alpha=0.3)
-	plt.savefig(os.path.join(dest_fld, f"scatter-sec-angle-{age}-larvae.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"scatter-sec-angle-{age}-larvae-" + date_file  + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 def render_pvalue_string(pval):
@@ -169,7 +173,7 @@ if __name__ == '__main__':
 	df_lat   = [] 
 	lat_dict = {'HOM':[], 'WT':[]} 
 	for file in filenames:
-		fish_name = file.replace('-bouts.mat', '')
+		fish_name = file.replace('-tail-bouts.mat', '')
 		
 		# There is a difference between the name of the Video file and the one of the Calcium file.
 		# Because of this, we look for the Calcium file that matches the Video files.
@@ -190,8 +194,8 @@ if __name__ == '__main__':
 		print(f"For fish {f_name} the size of bouts vector is {bouts.size / fps / 60}.")
 		
 		# We want to compare the length of the bouts with the maximum tail angle.
-		deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-deg.mat'))['tail']
-		deg_data = np.abs(deg_data[:, -1])
+		deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-degrees-ml.mat'))['tail_curve']
+		#deg_data = np.abs(deg_data[:, -1])
 		
 		# Here we find consecutive ones.
 		idd     = np.where(bouts == 1)[0].flatten()
@@ -202,8 +206,8 @@ if __name__ == '__main__':
 				num_lst.append(tmp_range)
 				test.append([f_name, dpf, genotype, len(num_lst[-1])/fps, np.max(deg_data[num_lst[-1]])])
 			
-			# if np.max(deg_data[tmp_range]) > 100:
-				# deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-deg.mat'))['tail']
+			# if np.max(deg_data[tmp_range]) > 200:
+				# #deg_data = loadmat(os.path.join(degree_folder, fish_name + '-tail-degrees-ml.mat'))['tail_curve']
 				# cmap = plt.get_cmap('coolwarm', 100)
 				# norm = colors.Normalize(tmp_range[0], tmp_range[-1])
 				# for i in tmp_range: 
@@ -335,7 +339,7 @@ if __name__ == '__main__':
 	ax.legend(frameon=False)
 	ax.set_xlabel('Density')
 	ax.set(ylabel='Duration of bouts [s]')
-	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-duration-bouts-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 	
@@ -354,7 +358,7 @@ if __name__ == '__main__':
 		bottom, top = ax.get_ylim()
 		ax.hlines(y=top , xmin=1, xmax=2, linewidth=2, color='k')
 		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
-		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-young-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-young-larva-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 		plt.close('all')
 	
 	for key in bouts_gen['WT'].keys(): 
@@ -372,7 +376,7 @@ if __name__ == '__main__':
 		bottom, top = ax.get_ylim()
 		ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
 		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
-		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-older-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.savefig(os.path.join(dest_fld, f"comparison-{key}-between-older-larva-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 		plt.close('all')
 		
 	for key in sec_gen['WT'].keys(): 
@@ -388,7 +392,7 @@ if __name__ == '__main__':
 		ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
 		ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
 		print(f"For section {key} the p-value is {pvalue}.")
-		plt.savefig(os.path.join(dest_fld, f"comparison-num-events-during-{key}-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+		plt.savefig(os.path.join(dest_fld, f"comparison-num-events-during-{key}-larva-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 		plt.close('all')
 		
 	#for key in sec_gen['WT'].keys(): 
@@ -404,7 +408,7 @@ if __name__ == '__main__':
 	ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
 	ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
 	print(f"For section {key} the p-value is {pvalue}.")
-	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-min-during-recording-larva.png")	, dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-min-during-recording-larva-" + date_file + ".png")	, dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 	
@@ -426,7 +430,7 @@ if __name__ == '__main__':
 	ax.legend(frameon=False)
 	ax.set_xlabel('Density')
 	ax.set(ylabel='Duration of bouts [s]')
-	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-young-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-young-duration-bouts-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 	# Violin plots of age groups. 
@@ -440,7 +444,7 @@ if __name__ == '__main__':
 	ax.legend(frameon=False)
 	ax.set_xlabel('Density')
 	ax.set(ylabel='Duration of bouts [s]')
-	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-older-duration-bouts.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"violinplot-comparison-genotypes-older-duration-bouts-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 	
@@ -458,7 +462,7 @@ if __name__ == '__main__':
 	ax.hlines(y=top, xmin=1, xmax=2, linewidth=2, color='k')
 	ax.text(1.5, top + 0.02, f'p={Decimal(pvalue):.2E}', fontsize=12)
 	print(f"For the average bouts for each stimulus the p-value is {pvalue}.")
-	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-after-stimulation-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"comparison-num-bouts-after-stimulation-larva-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
 	
 	
@@ -494,9 +498,7 @@ if __name__ == '__main__':
 	ax.spines[['top','right']].set_visible(False)
 	ax.spines[['left','bottom']].set_linewidth(2)
 	ax.tick_params(direction='in',width=1)
-	plt.savefig(os.path.join(dest_fld, f"comparison-latency-bouts-after-stimulation-larva.png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
+	plt.savefig(os.path.join(dest_fld, f"comparison-latency-bouts-after-stimulation-larva-" + date_file + ".png"), dpi=300, format='png', bbox_inches="tight", transparent=False)
 	plt.close('all')
-	
-	pdb.set_trace()
 	
 	sys.exit(0)
